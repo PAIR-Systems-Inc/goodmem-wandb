@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build sdist + wheel (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Install built wheel into a fresh venv
+        run: |
+          python -m venv .venv_check
+          .venv_check/bin/pip install --upgrade pip
+          .venv_check/bin/pip install dist/*.whl
+
+      - name: Import-check the installed package
+        run: |
+          .venv_check/bin/python -c "import goodmem_wandb; from goodmem_wandb import GoodMemClient; print('goodmem_wandb', goodmem_wandb.__version__, 'OK')"
+
+      - name: Upload dist artifacts
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
