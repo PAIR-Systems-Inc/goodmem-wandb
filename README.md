@@ -1,105 +1,163 @@
 # goodmem-wandb
 
-GoodMem client packaged for wandb agent integrations. GoodMem is a memory
-layer for AI agents with support for semantic storage, retrieval, and
-summarization. This package exposes the full GoodMem API surface as a clean
-Python client that can be used with any wandb agent (or any Python app).
+GoodMem retrieval for [Weights & Biases Weave](https://weave-docs.wandb.ai/).
 
-## Install
+Every retrieval is a traced Weave op, so a RAG call shows up in the Weave UI
+with its query, its latency, each hit's score **and what kind of score that
+is**, and any degradation the server reported. The same retriever can be
+wrapped as a `weave.Model` and measured with `weave.Evaluation`.
 
 ```bash
 pip install goodmem-wandb
 ```
 
-## Quick start
+## Trace a retrieval
 
 ```python
-from goodmem_wandb import GoodMemClient
+import weave
+from goodmem_wandb import GoodMemRetriever
 
-client = GoodMemClient(
-    base_url="http://localhost:8080",
-    api_key="gm_your_key_here",
-)
+weave.init("my-project")
 
-# 1. List available embedders
-embedders = client.list_embedders()
+retriever = GoodMemRetriever(space_name="docs")   # credentials from the environment
+result = retriever.search("how do I rotate an API key?")
 
-# 2. Create a space
-space = client.create_space(
-    name="my-space",
-    embedder_id=embedders[0]["embedderId"],
-)
-
-# 3. Store a text memory
-memory = client.create_memory(
-    space_id=space["spaceId"],
-    text_content="Important information to remember.",
-    source="manual",
-    tags="test,demo",
-)
-
-# 4. Store a PDF memory
-pdf_memory = client.create_memory(
-    space_id=space["spaceId"],
-    file_path="/path/to/document.pdf",
-)
-
-# 5. Retrieve memories by semantic search
-results = client.retrieve_memories(
-    query="important information",
-    space_ids=[space["spaceId"]],
-    reranker_id="<reranker-uuid>",     # optional
-    llm_id="<llm-uuid>",               # optional, enables abstractReply
-    relevance_threshold=0.5,           # optional
-    llm_temperature=0.2,               # optional
-    max_results=5,
-    chronological_resort=False,
-)
-
-# 6. Inspect / delete
-mem = client.get_memory(memory["memoryId"])
-client.delete_memory(memory["memoryId"])
+for hit in result["hits"]:
+    print(hit["score"], hit["score_kind"], hit["chunk_text"][:80])
 ```
 
-## Available operations
+`search()` returns:
 
-| Operation         | Method                                      | Purpose                                       |
-| ----------------- | ------------------------------------------- | --------------------------------------------- |
-| List Embedders    | `list_embedders()`                          | Discover available embedder models            |
-| List Spaces       | `list_spaces()`                             | List all spaces                               |
-| Get Space         | `get_space(space_id)`                       | Fetch a single space                          |
-| Create Space      | `create_space(name, embedder_id, ...)`      | Create or reuse a space                       |
-| Update Space      | `update_space(space_id, ...)`               | Rename, relabel, or flip visibility           |
-| Delete Space      | `delete_space(space_id)`                    | Delete a space and its memories               |
-| Create Memory     | `create_memory(space_id, ...)`              | Store text or a file as a memory              |
-| List Memories     | `list_memories(space_id, ...)`              | List memories in a space (paginated)          |
-| Retrieve Memories | `retrieve_memories(query, space_ids, ...)`  | Semantic search across spaces                 |
-| Get Memory        | `get_memory(memory_id)`                     | Fetch one memory and its content              |
-| Delete Memory     | `delete_memory(memory_id)`                  | Delete a memory                               |
+| Key | What it is |
+| --- | --- |
+| `hits` | `chunk_id`, `chunk_text`, `memory_id`, `space_id`, `source`, `score`, `score_kind`, `metadata` — in the server's order |
+| `score_kind` | `"vector"` or `"reranker"`. They are different scales; see below |
+| `statuses` | Server statuses that indicate a real problem, `[]` when clean |
+| `partial` | `True` when the server reported a problem *and* still returned usable hits |
+| `abstract_reply` | The server-generated summary, only when `llm_id` is set |
+| `space_ids` | Which spaces were actually searched |
 
-### Retrieval options
+Credentials come from `GOODMEM_BASE_URL` and `GOODMEM_API_KEY`, or as
+constructor keywords:
 
-`retrieve_memories` supports the full GoodMem post-processor configuration:
+```python
+GoodMemRetriever(space_name="docs", base_url="https://localhost:8080",
+                 api_key="gm_…", verify_ssl=False)
+```
 
-| Argument               | Type    | Purpose                                                            |
-| ---------------------- | ------- | ------------------------------------------------------------------ |
-| `reranker_id`          | str     | UUID of a reranker model to improve result ordering                |
-| `llm_id`               | str     | UUID of an LLM to generate contextual responses (`abstractReply`)  |
-| `relevance_threshold`  | float   | Minimum score (0–1) for including results                          |
-| `llm_temperature`      | float   | Creativity setting for LLM generation (0–2)                        |
-| `max_results`          | int     | Limit the number of returned memories                              |
-| `chronological_resort` | bool    | Reorder results by creation time                                   |
+They are deliberately **not** Weave fields. Weave publishes an object's
+pydantic fields verbatim to the trace server and its redaction helper does not
+run on that path, so a field named `api_key` on a `weave.Model` would be
+uploaded to W&B in plaintext. This package keeps the connection on a private
+attribute; `tests/test_regressions.py` asserts it.
 
-## Authentication
+## Evaluate a retrieval configuration
 
-The `GoodMemClient` requires:
+```python
+import weave
+from goodmem_wandb import GoodMemRetrievalModel, RecallAtK, MRR, FactRecall, RetrievalHealth
 
-- **base_url**: The base URL of your GoodMem instance (e.g.
-  `http://localhost:8080`, `https://api.goodmem.ai`).
-- **api_key**: Your GoodMem API key (`X-API-Key`, starts with `gm_`).
+weave.init("my-project")
 
-For self-signed certs (e.g. local dev with `https://localhost:8080`), pass
-`verify_ssl=False`.
+dataset = [
+    {"question": "how do I rotate an API key?",
+     "expected_memory_ids": ["01a0…"],
+     "expected_text": "rotate the key from the console"},
+]
+
+baseline = GoodMemRetrievalModel(space_name="docs", limit=5)
+reranked = GoodMemRetrievalModel(space_name="docs", limit=5, reranker_id="…")
+
+evaluation = weave.Evaluation(
+    dataset=dataset,
+    scorers=[RecallAtK(k=5), MRR(), FactRecall(), RetrievalHealth()],
+)
+evaluation.evaluate(baseline)
+evaluation.evaluate(reranked)   # compare the two in the Weave UI
+```
+
+Changing any field on the model versions it, so the two runs are directly
+comparable. The credentials are not fields, so they are not part of the
+version either.
+
+| Scorer | Measures |
+| --- | --- |
+| `RecallAtK(k=5)` | Fraction of `expected_memory_ids` in the top *k* **distinct memories** (several chunks of one memory are one document) |
+| `MRR()` | Reciprocal rank of the first expected memory; `0.0` if none was retrieved |
+| `FactRecall()` | Whether a known fact actually appears in the retrieved text — survives re-chunking and re-embedding, unlike an id metric |
+| `RetrievalHealth()` | Whether the retrieval was complete, so a silently-degraded run is visible as its own metric rather than only as a recall drop |
+
+None of them score on the raw relevance number, because that number does not
+mean the same thing between two configurations.
+
+## Scores
+
+GoodMem returns two different things in the same field, and this matters:
+
+| | Range observed on a live server | Best match is |
+| --- | --- | --- |
+| Vector score | negative, e.g. `-0.6154 … -0.3873` | the **lowest** number |
+| Reranker score | `0.2105 … -0.1081` — also goes negative | the **highest** number |
+
+Those are real numbers from one capture over the same three memories. So:
+
+* results keep **the server's order** and are never re-sorted here;
+* `score_kind` on every hit says which scale you are looking at;
+* `min_score` is only applied when `reranker_id` is set, and is applied
+  client-side where you can see it, never sent as the server's
+  `relevance_threshold`.
+
+## Filtering
+
+```python
+retriever = GoodMemRetriever(space_name="docs", metadata_filter={"category": "billing"})
+retriever.search("refunds", metadata_filter={"lang": "en"})   # AND-ed per call
+```
+
+Values are quoted for the GoodMem filter grammar (backslash escaping, verified
+against a live server; control characters are refused rather than mangled).
+For anything more complex, pass an expression directly:
+
+```python
+GoodMemRetriever(space_name="docs",
+                 filter="CAST(val('$.year') AS TEXT) = '2026'")
+```
+
+## Attaching to a space by name
+
+```python
+GoodMemRetriever(space_name="docs", embedder_id="…")                    # reuse or fail
+GoodMemRetriever(space_name="docs", embedder_id="…", create_space=True) # or create it
+```
+
+Attach-by-name is idempotent reuse: an existing space whose embedder matches is
+reused; one built on a **different** embedder is an error, because retrieving
+across mismatched embedders returns plausible-looking nonsense. A name that
+matches more than one space is also an error — GoodMem does not require space
+names to be unique. This matches the ActivePieces connector.
+
+## Sensitive corpora
+
+`trace_chunk_text=False` keeps chunk ids, scores and statuses in the trace but
+leaves the retrieved text out of it.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+ruff check src tests && mypy && pytest -m "not integration"
+```
+
+The offline suite replays NDJSON captured from a live GoodMem server
+(v1.0.320) through the real SDK decoders, so the wire format is never
+invented. The live suite needs a server and is skipped without one:
+
+```bash
+GOODMEM_BASE_URL=… GOODMEM_API_KEY=… GOODMEM_EMBEDDER_ID=… \
+  pytest -m integration
+```
+
+There is no default credential anywhere in this repository.
 
 ## License
 

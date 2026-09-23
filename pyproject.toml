@@ -4,36 +4,41 @@ build-backend = "hatchling.build"
 
 [project]
 name = "goodmem-wandb"
-version = "0.1.0"
-description = "GoodMem client for wandb agent integrations — semantic memory storage, retrieval, and summarization."
+version = "0.2.0"
+description = "GoodMem retrieval for Weights & Biases Weave — traced ops, an evaluable weave.Model, and retrieval scorers."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.9"
-authors = [
-    { name = "PairSys" },
-]
-keywords = ["goodmem", "wandb", "memory", "rag", "vector-search", "llm", "agents"]
+requires-python = ">=3.10"
+authors = [{ name = "PairSys" }]
+keywords = ["goodmem", "wandb", "weave", "memory", "rag", "retrieval", "evaluation", "tracing"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "requests>=2.28",
+    # 0.1.34 is the first release whose retrieve() decodes status events.
+    "goodmem>=0.1.34",
+    "weave>=0.51",
+    "pydantic>=2.7",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "build>=1.0",
     "pytest>=7.0",
+    "httpx>=0.27",
+    # Pinned: ruff's default rule set changes between minor releases, so an
+    # unpinned range makes a local run and a CI run different checks.
+    "ruff==0.16.8",
+    "mypy==1.18.2",
 ]
 
 [project.urls]
@@ -45,9 +50,32 @@ Issues = "https://github.com/PAIR-Systems-Inc/goodmem-wandb/issues"
 packages = ["src/goodmem_wandb"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "src/goodmem_wandb",
-    "README.md",
-    "LICENSE",
-    "pyproject.toml",
+include = ["src/goodmem_wandb", "tests", "README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs a live GoodMem server (GOODMEM_BASE_URL + GOODMEM_API_KEY)",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+extend-select = ["E", "F", "B", "I", "UP", "RUF", "PYI", "TRY", "PERF"]
+# TRY003: long messages inline are clearer than an exception subclass per case.
+# TRY300: an early return after the try body reads worse here.
+ignore = ["E501", "TRY003", "TRY300"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.10"
+packages = ["goodmem_wandb"]
+mypy_path = "src"
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
