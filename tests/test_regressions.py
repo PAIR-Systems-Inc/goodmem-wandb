@@ -15,7 +15,6 @@ import pytest
 from goodmem_wandb import (
     MRR,
     FactRecall,
-    GoodMemRetrievalError,
     GoodMemRetrievalModel,
     GoodMemRetriever,
     GoodMemSpaceError,
@@ -128,16 +127,36 @@ def test_a_status_the_sdk_does_not_know_is_surfaced_not_swallowed(recorder, clie
     assert out["statuses"][0]["unrecognized"] is True
 
 
-def test_a_failed_retrieval_raises_instead_of_looking_empty(recorder, client):
-    """0.1.0 returned success:true, totalResults:0 and blamed indexing."""
+def test_a_failed_retrieval_is_empty_and_flagged_not_raised(recorder, client):
+    """Contract Q4b. 0.1.0 returned success:true, totalResults:0 and blamed
+    indexing; the flag and the statuses are what make this distinguishable
+    from a genuine miss."""
     recorder.route(
         "POST",
         RETRIEVE,
         ndjson_response([{"status": {"code": "NOT_FOUND", "message": "space gone"}}]),
     )
-    with pytest.raises(GoodMemRetrievalError) as excinfo:
-        GoodMemRetriever(space_id=SPACE, client=client).search("q")
-    assert excinfo.value.statuses[0]["code"] == "NOT_FOUND"
+    out = GoodMemRetriever(space_id=SPACE, client=client).search("q")
+    assert out["hits"] == []
+    assert out["partial"] is True
+    assert [s["code"] for s in out["statuses"]] == ["NOT_FOUND"]
+
+
+def test_feature_disabled_is_informational_whatever_its_details(recorder, client):
+    """Contract Q1: the code alone decides. The server defines FEATURE_DISABLED
+    as 'disabled due to missing configuration' -- the caller did not ask for
+    the feature -- so no details check is needed or wanted."""
+    events = ndjson_events("retrieve_vector.ndjson")
+    events.insert(
+        0,
+        {"status": {"code": "FEATURE_DISABLED", "message": "Reranking disabled: no reranker configured.",
+                    "details": {"feature": "reranking", "required_param": "reranker_id"}}},
+    )
+    recorder.route("POST", RETRIEVE, ndjson_response(events))
+    out = GoodMemRetriever(space_id=SPACE, client=client).search("q")
+    assert out["statuses"] == []
+    assert out["partial"] is False
+    assert len(out["hits"]) == 3
 
 
 def test_a_genuinely_empty_result_is_empty_not_an_error(recorder, client):

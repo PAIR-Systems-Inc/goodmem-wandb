@@ -9,12 +9,7 @@ from pydantic import Field, PrivateAttr
 import weave
 
 from goodmem_wandb._connection import GoodMemConnection, split_connection_kwargs
-from goodmem_wandb._results import (
-    GoodMemRetrievalError,
-    abstract_reply,
-    classify,
-    hits_from_events,
-)
+from goodmem_wandb._results import abstract_reply, classify, hits_from_events
 from goodmem_wandb._spaces import GoodMemSpaceError, resolve
 from goodmem_wandb.filters import combine, from_mapping
 
@@ -143,11 +138,14 @@ class GoodMemRetriever(weave.Object):
         """Retrieve for one query.
 
         Returns ``{"query", "hits", "statuses", "partial", "abstract_reply",
-        "space_ids", "score_kind"}``. ``partial`` is True when the server
-        reported a real problem but still returned usable hits; a retrieval
-        that reported a problem and returned nothing raises
-        :class:`~goodmem_wandb._results.GoodMemRetrievalError` rather than
-        returning an empty list that reads as "no matches".
+        "space_ids", "score_kind"}``.
+
+        ``partial`` is True when the server reported a real problem during
+        this retrieval, whether or not hits came back; ``statuses`` says what
+        the problem was. A retrieval that reported a problem and returned
+        nothing is therefore an empty ``hits`` with ``partial=True`` -- it is
+        not raised, and it is distinguishable from "no matches" by the flag.
+        (Retrieval status contract, Q4a/Q4b.)
         """
         if not query or not query.strip():
             raise ValueError("query cannot be empty.")
@@ -183,17 +181,6 @@ class GoodMemRetriever(weave.Object):
         statuses, degraded = classify(events)
         hits = hits_from_events(events, reranked=reranked)
 
-        if degraded and not hits:
-            # A failed retrieval must not be indistinguishable from an empty one.
-            raise GoodMemRetrievalError(
-                "; ".join(
-                    f"{s.get('code', 'UNKNOWN')}: {s.get('message', '')}"
-                    for s in statuses
-                )
-                or "Retrieval failed",
-                statuses=statuses,
-            )
-
         if reranked and self.min_score is not None:
             hits = [
                 h for h in hits if h["score"] is None or h["score"] >= self.min_score
@@ -209,7 +196,7 @@ class GoodMemRetriever(weave.Object):
             "hits": hits,
             "score_kind": "reranker" if reranked else "vector",
             "statuses": statuses,
-            "partial": bool(degraded and hits),
+            "partial": degraded,
             "abstract_reply": abstract_reply(events),
             "space_ids": targets,
         }
@@ -228,4 +215,4 @@ class GoodMemRetriever(weave.Object):
         )
 
 
-__all__ = ["GoodMemRetrievalError", "GoodMemRetriever", "GoodMemSpaceError"]
+__all__ = ["GoodMemRetriever", "GoodMemSpaceError"]

@@ -16,7 +16,6 @@ published object's pydantic fields verbatim to the trace server.
 """
 
 from goodmem_wandb._connection import GoodMemConnection
-from goodmem_wandb._results import GoodMemRetrievalError
 from goodmem_wandb._spaces import GoodMemSpaceError
 from goodmem_wandb.model import GoodMemRetrievalModel
 from goodmem_wandb.retriever import GoodMemRetriever
@@ -28,7 +27,6 @@ __all__ = [
     "MRR",
     "FactRecall",
     "GoodMemConnection",
-    "GoodMemRetrievalError",
     "GoodMemRetrievalModel",
     "GoodMemRetriever",
     "GoodMemSpaceError",

@@ -31,7 +31,7 @@ before the fix, and the offline tests replay bytes captured from it.
 | Behaviour | 0.1.0 | 0.2.0 |
 | --- | --- | --- |
 | `status` events in the retrieval stream | No branch for them — dropped entirely | Classified: `FEATURE_DISABLED / summarization` is informational, a real status marks the result `partial`, and a code the SDK does not recognise is surfaced as `UNKNOWN` rather than assumed harmless |
-| A retrieval that failed | `success: true, totalResults: 0` | Raises `GoodMemRetrievalError` when the server reported a problem and returned nothing |
+| A retrieval that failed | `success: true, totalResults: 0`, blaming indexing | Empty `hits` with `partial: true` and the server's `statuses` — distinguishable from a miss, never raised |
 | `relevance_threshold` | Forwarded to the server; a documented value of `0.5` filtered out a reranked hit scoring `0.4224`, then blamed indexing | `min_score`, applied client-side and only with a reranker configured |
 | Relevance scores | Documented as "0–1, higher is better" | Reported as the server sends them, in the server's order, with `score_kind` on each hit. Both scales go negative |
 | `create_space` on an existing name | Returned `reused: true` and echoed back *your* embedder id, not the space's | Reuses only when the embedder matches; a mismatch or an ambiguous name is an error |

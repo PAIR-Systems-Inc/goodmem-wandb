@@ -8,17 +8,15 @@ from typing import Any
 from goodmem.models.good_mem_status import GoodMemStatus
 from goodmem.models.retrieve_memory_event import RetrieveMemoryEvent
 
-
-class GoodMemRetrievalError(RuntimeError):
-    """A retrieval that produced no usable result and must not look empty."""
-
-    def __init__(self, message: str, *, statuses: list[dict[str, Any]] | None = None):
-        super().__init__(message)
-        self.statuses = statuses or []
-
-
-# Notices that do not indicate incomplete retrieval.
-_INFORMATIONAL_CODES = frozenset({"LLM_CAPABILITY_INFERRED"})
+# Notices that carry no loss of results.
+#
+# FEATURE_DISABLED is informational unconditionally. The server defines it as
+# "feature disabled due to missing configuration" (common.proto, under
+# "Informational status messages (non-error)"): the caller did not configure
+# an optional feature, so nothing the caller asked for is missing. A feature
+# that was requested and could not be delivered arrives as a different code
+# (NOT_FOUND, RERANKING_FAILED, ...). Retrieval status contract, Q1.
+_INFORMATIONAL_CODES = frozenset({"LLM_CAPABILITY_INFERRED", "FEATURE_DISABLED"})
 
 
 def is_informational(status: GoodMemStatus) -> bool:
@@ -29,18 +27,7 @@ def is_informational(status: GoodMemStatus) -> bool:
     surfaced rather than assumed harmless. It is also not treated as a known
     failure — see :func:`classify`.
     """
-    code = status.code
-    if code is None:
-        return False
-    if code in _INFORMATIONAL_CODES:
-        return True
-    if code == "FEATURE_DISABLED":
-        details = status.details or {}
-        return (
-            details.get("feature") == "summarization"
-            and details.get("required_param") == "llm_id"
-        )
-    return False
+    return status.code is not None and status.code in _INFORMATIONAL_CODES
 
 
 def classify(
@@ -52,9 +39,10 @@ def classify(
 
     * Known informational notices are dropped.
     * Known non-informational statuses mark the result degraded.
-    * Codes this SDK does not recognize (``code is None``) are surfaced and
-      mark the result degraded, but never discard chunks and never raise. A
-      newer server must not be able to break retrieval here.
+    * Codes this SDK does not recognize (``code is None``) are surfaced as
+      ``UNKNOWN`` and mark the result degraded, but never discard chunks and
+      never raise. A newer server must not be able to break retrieval here.
+      (Retrieval status contract, Q3.)
     """
     surfaced: list[dict[str, Any]] = []
     degraded = False

@@ -33,7 +33,7 @@ for hit in result["hits"]:
 | `hits` | `chunk_id`, `chunk_text`, `memory_id`, `space_id`, `source`, `score`, `score_kind`, `metadata` — in the server's order |
 | `score_kind` | `"vector"` or `"reranker"`. They are different scales; see below |
 | `statuses` | Server statuses that indicate a real problem, `[]` when clean |
-| `partial` | `True` when the server reported a problem *and* still returned usable hits |
+| `partial` | `True` when the server reported a real problem during this retrieval — with or without hits. An empty `hits` with `partial=True` is a failed search, not a miss |
 | `abstract_reply` | The server-generated summary, only when `llm_id` is set |
 | `space_ids` | Which spaces were actually searched |
 
