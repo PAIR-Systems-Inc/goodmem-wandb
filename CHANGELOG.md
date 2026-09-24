@@ -48,7 +48,7 @@ before the fix, and the offline tests replay bytes captured from it.
 * `GoodMemRetrievalModel` — a `weave.Model` for `weave.Evaluation`.
 * `RecallAtK`, `MRR`, `FactRecall`, `RetrievalHealth` — retrieval scorers.
 * `trace_chunk_text=False` for corpora that should not be uploaded to W&B.
-* 37 offline tests over captured server bytes, and 11 live tests with verified
+* 39 offline tests over captured server bytes, and 11 live tests with verified
   teardown. 0.1.0 had one live-only script that CI never ran.
 * CI now runs lint, type-check and the offline suite. 0.1.0's CI only built a
   wheel and imported it.

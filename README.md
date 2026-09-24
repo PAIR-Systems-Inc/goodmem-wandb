@@ -151,7 +151,7 @@ leaves the retrieved text out of it.
 
 ```bash
 pip install -e ".[dev]"
-ruff check src tests && mypy && pytest -m "not integration"
+ruff check src tests examples && mypy && pytest -m "not integration"
 ```
 
 The offline suite replays NDJSON captured from a live GoodMem server
@@ -160,8 +160,12 @@ invented. The live suite needs a server and is skipped without one:
 
 ```bash
 GOODMEM_BASE_URL=… GOODMEM_API_KEY=… GOODMEM_EMBEDDER_ID=… \
+  GOODMEM_RERANKER_ID=… GOODMEM_VERIFY_SSL=0 \
   pytest -m integration
 ```
+
+`GOODMEM_RERANKER_ID` is optional — the reranker tests skip without it.
+`GOODMEM_VERIFY_SSL=0` is for a local server with a self-signed certificate.
 
 There is no default credential anywhere in this repository.
 
