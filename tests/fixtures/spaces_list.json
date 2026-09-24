@@ -1,0 +1,83 @@
+{
+  "spaces": [
+    {
+      "spaceId": "01a0ce67-ff3e-748d-aba9-0e36a8da091c",
+      "name": "goodmem-wandb-fixtures",
+      "labels": {},
+      "spaceEmbedders": [
+        {
+          "spaceId": "01a0ce67-ff3e-748d-aba9-0e36a8da091c",
+          "embedderId": "019cfd1c-c033-7517-b7de-f73941a0464b",
+          "defaultRetrievalWeight": 1.0,
+          "createdAt": 1790169317190,
+          "updatedAt": 1790169317190,
+          "createdById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+          "updatedById": "019cfcff-37c7-75ef-be71-06c83dae99c3"
+        }
+      ],
+      "createdAt": 1790169317190,
+      "updatedAt": 1790169317190,
+      "ownerId": "019cfcff-37c5-76d0-bd46-8525e29a9c82",
+      "createdById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+      "updatedById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+      "defaultChunkingConfig": {
+        "none": null,
+        "recursive": {
+          "chunkSize": 256,
+          "chunkOverlap": 25,
+          "separators": [
+            "\n\n",
+            "\n",
+            ". ",
+            " ",
+            ""
+          ],
+          "keepStrategy": "KEEP_END",
+          "separatorIsRegex": false,
+          "lengthMeasurement": "CHARACTER_COUNT"
+        },
+        "sentence": null
+      }
+    },
+    {
+      "spaceId": "01a0abe8-6894-751b-9bfc-1285b43f69f4",
+      "name": "active pieces test",
+      "labels": {},
+      "spaceEmbedders": [
+        {
+          "spaceId": "01a0abe8-6894-751b-9bfc-1285b43f69f4",
+          "embedderId": "019e3d24-0763-70f5-9786-da6b30b90d2f",
+          "defaultRetrievalWeight": 1.0,
+          "createdAt": 1789590530221,
+          "updatedAt": 1789590530221,
+          "createdById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+          "updatedById": "019cfcff-37c7-75ef-be71-06c83dae99c3"
+        }
+      ],
+      "createdAt": 1789590530221,
+      "updatedAt": 1789590530221,
+      "ownerId": "019cfcff-37c5-76d0-bd46-8525e29a9c82",
+      "createdById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+      "updatedById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+      "defaultChunkingConfig": {
+        "none": null,
+        "recursive": {
+          "chunkSize": 256,
+          "chunkOverlap": 25,
+          "separators": [
+            "\n\n",
+            "\n",
+            ". ",
+            " ",
+            ""
+          ],
+          "keepStrategy": "KEEP_END",
+          "separatorIsRegex": false,
+          "lengthMeasurement": "CHARACTER_COUNT"
+        },
+        "sentence": null
+      }
+    }
+  ],
+  "nextToken": "UAKSAxABnPz_N8V20L1GhSXimpyCsAQA"
+}

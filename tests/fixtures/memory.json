@@ -1,0 +1,18 @@
+{
+  "memoryId": "01a0ce67-ff50-764a-bbe0-a098fe9c250f",
+  "spaceId": "01a0ce67-ff3e-748d-aba9-0e36a8da091c",
+  "originalContentLength": 50,
+  "originalContentSha256": "7dfd19a11c0738906b3ade554ad548437e6f67cc0370f0e7b22d09c12ba007f9",
+  "contentType": "text/plain",
+  "processingStatus": "PENDING",
+  "pageImageStatus": "PENDING",
+  "pageImageCount": 0,
+  "metadata": {
+    "source": "canary",
+    "category": "audit"
+  },
+  "createdAt": 1790169317205,
+  "updatedAt": 1790169317205,
+  "createdById": "019cfcff-37c7-75ef-be71-06c83dae99c3",
+  "updatedById": "019cfcff-37c7-75ef-be71-06c83dae99c3"
+}

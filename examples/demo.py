@@ -1,61 +1,56 @@
-"""Minimal demo for goodmem-wandb.
+"""Trace a GoodMem retrieval in Weave, then evaluate two configurations.
 
-Creates a space, stores a text memory and a PDF, semantically retrieves
-the content, and leaves the resources on the server for inspection.
-
-Configure with the same env vars as ``tests/test_live.py``.
+    GOODMEM_BASE_URL=https://localhost:8080 \
+    GOODMEM_API_KEY=gm_… \
+    GOODMEM_SPACE_ID=… \
+    python examples/demo.py
 """
 
 from __future__ import annotations
 
 import os
-import time
 
-from goodmem_wandb import GoodMemClient
+import weave
 
-BASE_URL = os.environ.get("GOODMEM_BASE_URL", "https://localhost:8080")
-API_KEY = os.environ.get("GOODMEM_API_KEY", "gm_g5xcse2tjgcznlg45c5le4ti5q")
-EMBEDDER_ID = os.environ.get(
-    "GOODMEM_EMBEDDER_ID", "019cfd1c-c033-7517-b7de-f73941a0464b"
+from goodmem_wandb import (
+    MRR,
+    FactRecall,
+    GoodMemRetrievalModel,
+    GoodMemRetriever,
+    RecallAtK,
+    RetrievalHealth,
 )
-SPACE_NAME = f"goodmem-wandb-demo-{int(time.time())}"
 
+SPACE_ID = os.environ["GOODMEM_SPACE_ID"]
+RERANKER_ID = os.getenv("GOODMEM_RERANKER_ID")
 
-def main() -> None:
-    client = GoodMemClient(base_url=BASE_URL, api_key=API_KEY, verify_ssl=False)
+weave.init(os.getenv("WEAVE_PROJECT", "goodmem-demo"))
 
-    print("→ list_embedders")
-    embedders = client.list_embedders()
-    print(f"  found {len(embedders)} embedder(s)")
+# 1. One traced retrieval. Open the printed Weave URL to see the call.
+retriever = GoodMemRetriever(space_id=SPACE_ID, limit=5)
+result = retriever.search("what is this corpus about?")
 
-    print(f"→ create_space '{SPACE_NAME}'")
-    space = client.create_space(name=SPACE_NAME, embedder_id=EMBEDDER_ID)
-    space_id = space["spaceId"]
-    print(f"  spaceId = {space_id}")
+print(f"score_kind={result['score_kind']}  partial={result['partial']}")
+for hit in result["hits"]:
+    print(f"  {hit['score']:+.4f}  {hit['chunk_text'][:70]}")
+if result["statuses"]:
+    print("  server statuses:", [s["code"] for s in result["statuses"]])
 
-    print("→ create_memory (text)")
-    mem = client.create_memory(
-        space_id=space_id,
-        text_content="GoodMem is a memory layer for AI agents.",
-        source="goodmem-wandb-demo",
+# 2. Compare two retrieval configurations over a small dataset.
+dataset = [
+    {
+        "question": "what is this corpus about?",
+        "expected_memory_ids": [hit["memory_id"] for hit in result["hits"][:1]],
+        "expected_text": (result["hits"][0]["chunk_text"][:30] if result["hits"] else ""),
+    }
+]
+evaluation = weave.Evaluation(
+    dataset=dataset,
+    scorers=[RecallAtK(k=5), MRR(), FactRecall(), RetrievalHealth()],
+)
+
+evaluation.evaluate(GoodMemRetrievalModel(space_id=SPACE_ID, limit=5))
+if RERANKER_ID:
+    evaluation.evaluate(
+        GoodMemRetrievalModel(space_id=SPACE_ID, limit=5, reranker_id=RERANKER_ID)
     )
-    print(f"  memoryId = {mem['memoryId']}")
-
-    print("→ retrieve_memories")
-    out = client.retrieve_memories(
-        query="memory layer for AI agents",
-        space_ids=[space_id],
-        max_results=3,
-    )
-    print(f"  totalResults = {out['totalResults']}")
-    for r in out["results"][:3]:
-        snippet = (r.get("chunkText") or "")[:80].replace("\n", " ")
-        print(f"    • {snippet}")
-
-    print("\nResources left on server:")
-    print(f"  spaceId  = {space_id}")
-    print(f"  memoryId = {mem['memoryId']}")
-
-
-if __name__ == "__main__":
-    main()

@@ -4,42 +4,60 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
-    name: Build sdist + wheel (Python ${{ matrix.python-version }})
+  lint-and-test:
+    name: lint + test (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install build tooling
+      - name: Install
+        # A virtualenv, not --system: the runner's interpreter is externally
+        # managed. ruff and mypy are pinned in [dev] so this runs the same
+        # checks a developer runs locally.
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install build
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: ruff
+        run: .venv/bin/ruff check src tests examples
+
+      - name: mypy
+        run: .venv/bin/mypy
+
+      - name: pytest
+        # The live tests need a server and are skipped without credentials.
+        run: .venv/bin/pytest -m "not integration"
 
       - name: Build sdist and wheel
-        run: python -m build
-
-      - name: Install built wheel into a fresh venv
         run: |
-          python -m venv .venv_check
-          .venv_check/bin/pip install --upgrade pip
-          .venv_check/bin/pip install dist/*.whl
+          .venv/bin/pip install build
+          .venv/bin/python -m build
 
-      - name: Import-check the installed package
+      - name: Verify the wheel imports in a clean env
         run: |
-          .venv_check/bin/python -c "import goodmem_wandb; from goodmem_wandb import GoodMemClient; print('goodmem_wandb', goodmem_wandb.__version__, 'OK')"
+          python -m venv .venv-smoke
+          .venv-smoke/bin/pip install dist/goodmem_wandb-*.whl
+          .venv-smoke/bin/python -c "from goodmem_wandb import GoodMemRetriever, GoodMemRetrievalModel, RecallAtK, __version__; print('goodmem-wandb', __version__, 'OK')"
 
       - name: Upload dist artifacts
         if: matrix.python-version == '3.12'
@@ -48,3 +66,18 @@ jobs:
           name: dist
           path: dist/
           if-no-files-found: error
+
+  secrets:
+    name: no GoodMem keys in the tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for gm_ API keys
+        # GitHub push protection does not know this prefix. 0.1.0 shipped a
+        # real key in tests/test_live.py on the default branch for four months.
+        run: |
+          if grep -rInE 'gm_[a-z0-9]{20,}' --exclude-dir=.git --exclude-dir=.venv --exclude-dir=dist .; then
+            echo "::error::a GoodMem API key is present in the working tree"
+            exit 1
+          fi
+          echo "clean"
