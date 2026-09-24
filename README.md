@@ -107,6 +107,12 @@ Those are real numbers from one capture over the same three memories. So:
   client-side where you can see it, never sent as the server's
   `relevance_threshold`.
 
+Even with a reranker the scale is **model-dependent**: on the same documents
+Voyage `rerank-2.5` scored `0.27..0.93` and Jina `jina-reranker-v3` scored
+`-0.14..0.43`. A `min_score` tuned for one empties the other, so when a
+threshold removes every hit the retriever warns and names the observed range.
+Calibrate `min_score` for the reranker you use; there is no default.
+
 ## Filtering
 
 ```python

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+import warnings
 
 from pydantic import Field, PrivateAttr
 import weave
@@ -182,9 +183,24 @@ class GoodMemRetriever(weave.Object):
         hits = hits_from_events(events, reranked=reranked)
 
         if reranked and self.min_score is not None:
-            hits = [
+            kept = [
                 h for h in hits if h["score"] is None or h["score"] >= self.min_score
             ]
+            if hits and not kept:
+                # Reranker scales are model-dependent: Voyage rerank-2.5 scored
+                # 0.27..0.93 and Jina jina-reranker-v3 -0.14..0.43 on the same
+                # documents. A threshold tuned for one empties the other, and
+                # an empty list reads as "no matches".
+                scores = [h["score"] for h in hits if h["score"] is not None]
+                warnings.warn(
+                    f"min_score={self.min_score} removed all {len(hits)} reranked "
+                    f"hit(s); this reranker's scores ranged "
+                    f"{min(scores):.3f}..{max(scores):.3f}. Reranker score scales "
+                    "are model-dependent and not necessarily 0-1; calibrate "
+                    "min_score for the reranker in use.",
+                    stacklevel=2,
+                )
+            hits = kept
         # Server order is authoritative and is not re-sorted here.
         hits = hits[:want]
 

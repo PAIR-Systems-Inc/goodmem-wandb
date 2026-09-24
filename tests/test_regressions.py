@@ -457,3 +457,14 @@ def test_fixtures_are_real_server_bytes():
     codes = [e["status"]["code"] for e in events if "status" in e]
     assert codes == ["FEATURE_DISABLED"]
     assert any(e.get("resultSetBoundary", {}).get("stageName") == "rerank" for e in events)
+
+
+def test_a_min_score_that_removes_every_reranked_hit_says_so(recorder, client):
+    """Measured live 2026-09-24: Voyage rerank-2.5 0.27..0.93, Jina
+    jina-reranker-v3 -0.14..0.43 on the same documents. A threshold tuned
+    for one empties the other; the empty case must not look like a miss."""
+    r = make(recorder, client, "retrieve_reranked.ndjson", reranker_id="rr", min_score=0.9)
+    with pytest.warns(UserWarning, match="removed all 3 reranked hit"):
+        out = r.search("canary phrase")
+    assert out["hits"] == []
+    assert out["partial"] is False, "the threshold, not the server, emptied it"
