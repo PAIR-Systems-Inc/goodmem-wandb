@@ -41,9 +41,12 @@ Credentials come from `GOODMEM_BASE_URL` and `GOODMEM_API_KEY`, or as
 constructor keywords:
 
 ```python
-GoodMemRetriever(space_name="docs", base_url="https://localhost:8080",
-                 api_key="gm_…", verify_ssl=False)
+GoodMemRetriever(space_name="docs", base_url="https://goodmem.example.com",
+                 api_key="gm_…")
 ```
+
+`verify_ssl` defaults to on and exists for a local server with a self-signed
+certificate only; no example here turns it off.
 
 They are deliberately **not** Weave fields. Weave publishes an object's
 pydantic fields verbatim to the trace server and its redaction helper does not
