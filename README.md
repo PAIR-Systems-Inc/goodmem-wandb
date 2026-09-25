@@ -57,6 +57,8 @@ attribute; `tests/test_regressions.py` asserts it.
 ## Evaluate a retrieval configuration
 
 ```python
+import asyncio
+
 import weave
 from goodmem_wandb import GoodMemRetrievalModel, RecallAtK, MRR, FactRecall, RetrievalHealth
 
@@ -75,9 +77,12 @@ evaluation = weave.Evaluation(
     dataset=dataset,
     scorers=[RecallAtK(k=5), MRR(), FactRecall(), RetrievalHealth()],
 )
-evaluation.evaluate(baseline)
-evaluation.evaluate(reranked)   # compare the two in the Weave UI
+asyncio.run(evaluation.evaluate(baseline))
+asyncio.run(evaluation.evaluate(reranked))   # compare the two in the Weave UI
 ```
+
+`Evaluation.evaluate` is a coroutine: called without `asyncio.run` (or
+`await` in a notebook) it returns without running anything.
 
 Changing any field on the model versions it, so the two runs are directly
 comparable. The credentials are not fields, so they are not part of the

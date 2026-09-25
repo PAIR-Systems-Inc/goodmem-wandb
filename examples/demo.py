@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import weave
@@ -41,7 +42,9 @@ dataset = [
     {
         "question": "what is this corpus about?",
         "expected_memory_ids": [hit["memory_id"] for hit in result["hits"][:1]],
-        "expected_text": (result["hits"][0]["chunk_text"][:30] if result["hits"] else ""),
+        "expected_text": (
+            result["hits"][0]["chunk_text"][:30] if result["hits"] else ""
+        ),
     }
 ]
 evaluation = weave.Evaluation(
@@ -49,8 +52,11 @@ evaluation = weave.Evaluation(
     scorers=[RecallAtK(k=5), MRR(), FactRecall(), RetrievalHealth()],
 )
 
-evaluation.evaluate(GoodMemRetrievalModel(space_id=SPACE_ID, limit=5))
+# Evaluation.evaluate is a coroutine; without asyncio.run nothing is evaluated.
+asyncio.run(evaluation.evaluate(GoodMemRetrievalModel(space_id=SPACE_ID, limit=5)))
 if RERANKER_ID:
-    evaluation.evaluate(
-        GoodMemRetrievalModel(space_id=SPACE_ID, limit=5, reranker_id=RERANKER_ID)
+    asyncio.run(
+        evaluation.evaluate(
+            GoodMemRetrievalModel(space_id=SPACE_ID, limit=5, reranker_id=RERANKER_ID)
+        )
     )
