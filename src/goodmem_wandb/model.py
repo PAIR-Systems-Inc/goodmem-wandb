@@ -17,17 +17,20 @@ class GoodMemRetrievalModel(weave.Model):
     ``predict`` takes one question and returns the retriever's result, so the
     scorers in :mod:`goodmem_wandb.scorers` can read ``hits`` from it::
 
+        import asyncio
+
         import weave
         from goodmem_wandb import GoodMemRetrievalModel, RecallAtK, MRR
 
         weave.init("my-project")
         model = GoodMemRetrievalModel(space_name="docs", limit=5)
 
-        weave.Evaluation(
+        evaluation = weave.Evaluation(
             dataset=[{"question": "how do I rotate a key?",
                       "expected_memory_ids": ["01a0…"]}],
             scorers=[RecallAtK(k=5), MRR()],
-        ).evaluate(model)
+        )
+        asyncio.run(evaluation.evaluate(model))   # a coroutine: run it
 
     Changing any field here versions the model in Weave, so two retrieval
     configurations can be compared directly. Credentials are not fields and

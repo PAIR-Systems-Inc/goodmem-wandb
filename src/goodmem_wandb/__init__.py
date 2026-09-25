@@ -21,7 +21,7 @@ from goodmem_wandb.model import GoodMemRetrievalModel
 from goodmem_wandb.retriever import GoodMemRetriever
 from goodmem_wandb.scorers import MRR, FactRecall, RecallAtK, RetrievalHealth
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "MRR",
