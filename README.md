@@ -30,6 +30,7 @@ for hit in result["hits"]:
 
 | Key | What it is |
 | --- | --- |
+| `query` | The query as passed in |
 | `hits` | `chunk_id`, `chunk_text`, `memory_id`, `space_id`, `source`, `score`, `score_kind`, `metadata` — in the server's order |
 | `score_kind` | `"vector"` or `"reranker"`. They are different scales; see below |
 | `statuses` | Server statuses that indicate a real problem, `[]` when clean |
@@ -172,7 +173,7 @@ GOODMEM_BASE_URL=… GOODMEM_API_KEY=… GOODMEM_EMBEDDER_ID=… \
   pytest -m integration
 ```
 
-`GOODMEM_RERANKER_ID` is optional — the reranker tests skip without it.
+`GOODMEM_RERANKER_ID` is optional — the one reranker test skips without it.
 `GOODMEM_VERIFY_SSL=0` is for a local server with a self-signed certificate.
 
 There is no default credential anywhere in this repository.

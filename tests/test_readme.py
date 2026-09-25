@@ -204,6 +204,22 @@ def test_the_readme_evaluation_actually_runs_both_models(readme_env: Any) -> Non
     assert RERANKER in json.dumps(stand_in.retrieves[1])
 
 
+def test_the_readme_return_table_names_every_key_search_returns(
+    readme_env: Any,
+) -> None:
+    from goodmem_wandb import GoodMemRetriever
+
+    out = GoodMemRetriever(space_name="docs").search("x")
+    text = README.read_text(encoding="utf-8")
+    table = text.split("`search()` returns:")[1].split("\n\n")[1]
+    documented = set(re.findall(r"^\| `(\w+)` \|", table, re.MULTILINE))
+    assert documented == set(out)
+
+    hit_row = next(line for line in table.splitlines() if line.startswith("| `hits` |"))
+    hit_keys = set(re.findall(r"`(\w+)`", hit_row)) - {"hits"}
+    assert hit_keys == set(out["hits"][0])
+
+
 def test_the_demo_script_actually_runs_its_evaluations(
     readme_env: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
