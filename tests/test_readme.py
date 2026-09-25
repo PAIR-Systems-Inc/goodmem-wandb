@@ -243,12 +243,15 @@ def test_the_demo_script_actually_runs_its_evaluations(
 def test_the_model_docstring_example_actually_runs_its_evaluation(
     readme_env: Any,
 ) -> None:
+    import inspect
     import textwrap
 
     from goodmem_wandb import GoodMemRetrievalModel
 
-    doc = GoodMemRetrievalModel.__doc__ or ""
-    example = textwrap.dedent(doc.split("::\n", 1)[1].split("\n\n    Changing")[0])
+    # cleandoc: Python 3.13 strips docstring indentation at compile time,
+    # earlier versions do not.
+    doc = inspect.cleandoc(GoodMemRetrievalModel.__doc__ or "")
+    example = textwrap.dedent(doc.split("::\n", 1)[1].split("\n\nChanging")[0])
     for placeholder, value in PLACEHOLDERS:
         example = example.replace(placeholder, value)
     _stand_in, trace = readme_env
