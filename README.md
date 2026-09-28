@@ -32,7 +32,7 @@ for hit in result["hits"]:
 | --- | --- |
 | `query` | The query as passed in |
 | `hits` | `chunk_id`, `chunk_text`, `memory_id`, `space_id`, `source`, `score`, `score_kind`, `metadata` — in the server's order |
-| `score_kind` | `"vector"` or `"reranker"`. They are different scales; see below |
+| `score_kind` | `"vector"` or `"reranker"`: what the server actually returned, not what was configured. They are different scales; see below |
 | `statuses` | Server statuses that indicate a real problem, `[]` when clean |
 | `partial` | `True` when the server reported a real problem during this retrieval — with or without hits. An empty `hits` with `partial=True` is a failed search, not a miss |
 | `abstract_reply` | The server-generated summary, only when `llm_id` is set |
@@ -112,7 +112,7 @@ Those are real numbers from one capture over the same three memories. So:
 
 * results keep **the server's order** and are never re-sorted here;
 * `score_kind` on every hit says which scale you are looking at;
-* `min_score` is only applied when `reranker_id` is set, and is applied
+* `min_score` is only applied to reranker scores, and is applied
   client-side where you can see it, never sent as the server's
   `relevance_threshold`.
 
@@ -122,20 +122,47 @@ Voyage `rerank-2.5` scored `0.27..0.93` and Jina `jina-reranker-v3` scored
 threshold removes every hit the retriever warns and names the observed range.
 Calibrate `min_score` for the reranker you use; there is no default.
 
+`score_kind` says what the server did, not what was configured. When
+`reranker_id` is set but the reranker fails, the server reports
+`RERANKING_FAILED` (and `NOT_FOUND` for a missing reranker) and still returns
+the vector-stage hits. Those hits come back as `score_kind: "vector"` with
+their vector scores, `min_score` is not applied to them — a reranker
+threshold on vector scores would discard every hit the server returned — and
+the result is `partial: True` with both codes in `statuses`. Measured on a
+live server (v1.0.320) with a missing reranker: the three hits scored
+`-0.785, -0.577, -0.111` and all three are returned.
+
 ## Filtering
 
 ```python
-retriever = GoodMemRetriever(space_name="docs", metadata_filter={"category": "billing"})
+retriever = GoodMemRetriever(
+    space_name="docs", metadata_filter={"category": "billing", "archived": False}
+)
 retriever.search("refunds", metadata_filter={"lang": "en"})   # AND-ed per call
 ```
 
-Values are quoted for the GoodMem filter grammar (backslash escaping, verified
-against a live server; control characters are refused rather than mangled).
+Each value is compared as its own type. GoodMem compares a cast of the stored
+JSON value, and the cast has to match the type:
+
+| Value | Sent as |
+| --- | --- |
+| `str` | `CAST(val('$.field') AS TEXT) = '…'`, quoted for the filter grammar (backslash escaping, verified against a live server; control characters are refused rather than mangled) |
+| `bool` | `CAST(val('$.field') AS BOOLEAN) = true` or `= false` |
+| `int`, `float` | `CAST(val('$.field') AS NUMERIC) = 2026`, finite numbers only, written as a plain decimal |
+| `None`, anything else | Refused with `ValueError` before any request is sent |
+
+A mismatched cast is not rejected by the server, it just matches nothing. On a
+live server (v1.0.320) a memory with metadata `{"flag": true, "n": 5}` is
+found by `CAST(val('$.flag') AS BOOLEAN) = true` and by
+`CAST(val('$.n') AS NUMERIC) = 5.0`, but `CAST(val('$.flag') AS TEXT) = 'True'`
+and `CAST(val('$.n') AS TEXT) = '5.0'` both return nothing with HTTP 200. A
+string stays text: `{"year": "2026"}` compares the text `'2026'`.
+
 For anything more complex, pass an expression directly:
 
 ```python
 GoodMemRetriever(space_name="docs",
-                 filter="CAST(val('$.year') AS TEXT) = '2026'")
+                 filter="CAST(val('$.year') AS NUMERIC) >= 2026")
 ```
 
 ## Attaching to a space by name

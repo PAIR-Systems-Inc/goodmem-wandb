@@ -47,8 +47,11 @@ if not (BASE_URL and API_KEY and EMBEDDER_ID):
 
 CANARY = "The GoodMem Weave live-test canary is FIG-88-MERIDIAN."
 FACTS = [
-    (CANARY, {"category": "canary"}),
-    ("Weave records an op call's inputs, output and latency.", {"category": "weave"}),
+    (CANARY, {"category": "canary", "flag": True, "n": 5}),
+    (
+        "Weave records an op call's inputs, output and latency.",
+        {"category": "weave", "flag": False, "n": -3},
+    ),
     ("A GoodMem vector score may be negative.", {"category": "scores"}),
 ]
 
@@ -142,10 +145,53 @@ def test_feature_disabled_does_not_look_like_a_failure(live: Any) -> None:
     assert out["score_kind"] == "reranker"
 
 
+def test_a_failed_reranker_returns_the_vector_hits_unthresholded(live: Any) -> None:
+    """With a reranker that does not exist the server reports NOT_FOUND and
+    RERANKING_FAILED and returns the vector-stage hits. 0.2.1 labelled them
+    "reranker" and min_score=0.0 then removed all of them."""
+    r = GoodMemRetriever(
+        space_id=live["space_id"],
+        client=live["client"],
+        reranker_id="00000000-0000-7000-8000-000000000000",
+        min_score=0.0,
+    )
+    out = r.search("what is the live-test canary")
+    assert out["hits"], "the server's fallback hits must be returned"
+    assert out["score_kind"] == "vector"
+    assert all(h["score_kind"] == "vector" for h in out["hits"])
+    assert out["partial"] is True
+    assert {"NOT_FOUND", "RERANKING_FAILED"} <= {s["code"] for s in out["statuses"]}
+
+
 def test_metadata_filter_scopes_the_search(retriever: GoodMemRetriever) -> None:
     out = retriever.search("anything", metadata_filter={"category": "scores"})
     assert out["hits"]
     assert all(h["metadata"].get("category") == "scores" for h in out["hits"])
+
+
+@pytest.mark.parametrize(
+    ("metadata_filter", "expected"),
+    [
+        ({"flag": True}, {"canary"}),
+        ({"flag": False}, {"weave"}),
+        ({"n": 5}, {"canary"}),
+        ({"n": 5.0}, {"canary"}),
+        ({"n": -3}, {"weave"}),
+        ({"flag": True, "category": "canary"}, {"canary"}),
+        ({"n": 1e20}, set()),
+        ({"n": 1.5e-7}, set()),
+    ],
+    ids=repr,
+)
+def test_boolean_and_numeric_filters_compare_as_their_own_type(
+    retriever: GoodMemRetriever, metadata_filter: dict[str, Any], expected: set[str]
+) -> None:
+    """0.2.1 compared every value as text: {"flag": True} was sent as
+    = 'True' and {"n": 5.0} as = '5.0'; both matched nothing, with HTTP 200.
+    The plain-decimal forms of 1e20 and 1.5e-7 must parse, too."""
+    out = retriever.search("anything", metadata_filter=metadata_filter)
+    assert {h["metadata"].get("category") for h in out["hits"]} == expected
+    assert out["partial"] is False
 
 
 def test_a_filter_matching_nothing_is_empty_not_an_error(
