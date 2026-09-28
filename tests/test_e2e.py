@@ -142,6 +142,24 @@ def test_feature_disabled_does_not_look_like_a_failure(live: Any) -> None:
     assert out["score_kind"] == "reranker"
 
 
+def test_a_failed_reranker_returns_the_vector_hits_unthresholded(live: Any) -> None:
+    """With a reranker that does not exist the server reports NOT_FOUND and
+    RERANKING_FAILED and returns the vector-stage hits. 0.2.1 labelled them
+    "reranker" and min_score=0.0 then removed all of them."""
+    r = GoodMemRetriever(
+        space_id=live["space_id"],
+        client=live["client"],
+        reranker_id="00000000-0000-7000-8000-000000000000",
+        min_score=0.0,
+    )
+    out = r.search("what is the live-test canary")
+    assert out["hits"], "the server's fallback hits must be returned"
+    assert out["score_kind"] == "vector"
+    assert all(h["score_kind"] == "vector" for h in out["hits"])
+    assert out["partial"] is True
+    assert {"NOT_FOUND", "RERANKING_FAILED"} <= {s["code"] for s in out["statuses"]}
+
+
 def test_metadata_filter_scopes_the_search(retriever: GoodMemRetriever) -> None:
     out = retriever.search("anything", metadata_filter={"category": "scores"})
     assert out["hits"]

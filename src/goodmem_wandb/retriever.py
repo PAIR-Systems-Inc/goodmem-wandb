@@ -10,7 +10,12 @@ from pydantic import Field, PrivateAttr
 import weave
 
 from goodmem_wandb._connection import GoodMemConnection, split_connection_kwargs
-from goodmem_wandb._results import abstract_reply, classify, hits_from_events
+from goodmem_wandb._results import (
+    abstract_reply,
+    classify,
+    hits_from_events,
+    reranking_failed,
+)
 from goodmem_wandb._spaces import GoodMemSpaceError, resolve
 from goodmem_wandb.filters import combine, from_mapping
 
@@ -40,8 +45,15 @@ class GoodMemRetriever(weave.Object):
     negative and whose best match may be the *lowest* number; a reranker score
     is a different scale that can also be negative. They are never mixed,
     re-sorted or thresholded against each other -- ``score_kind`` on each hit
-    says which one you are looking at, and ``min_score`` is only honoured with
-    a reranker configured.
+    says which one you are looking at, and ``min_score`` is only applied to
+    reranker scores.
+
+    ``score_kind`` reports what the server actually did, not what was
+    configured. When ``reranker_id`` is set but the reranker fails, the server
+    reports ``RERANKING_FAILED`` (and ``NOT_FOUND`` for a missing reranker)
+    and still returns the vector-stage hits. Those hits are ``"vector"``,
+    ``min_score`` is not applied to them, and the result is ``partial`` with
+    both statuses.
     """
 
     space_id: str | None = None
@@ -65,7 +77,11 @@ class GoodMemRetriever(weave.Object):
     reranker_id: str | None = None
     min_score: float | None = Field(
         default=None,
-        description="Only applied when reranker_id is set. See the class docstring.",
+        description=(
+            "Applied only to reranker scores: not without reranker_id, and not "
+            "to the vector hits the server returns when the reranker fails. "
+            "See the class docstring."
+        ),
     )
     filter: str | None = Field(
         default=None,
@@ -147,12 +163,16 @@ class GoodMemRetriever(weave.Object):
         nothing is therefore an empty ``hits`` with ``partial=True`` -- it is
         not raised, and it is distinguishable from "no matches" by the flag.
         (Retrieval status contract, Q4a/Q4b.)
+
+        ``score_kind`` is ``"reranker"`` only when a reranker was requested
+        and the server did not report that it failed; a failed reranker's
+        vector fallback is ``"vector"`` and is never thresholded.
         """
         if not query or not query.strip():
             raise ValueError("query cannot be empty.")
 
         want = limit if limit is not None else self.limit
-        reranked = bool(self.reranker_id)
+        rerank_requested = bool(self.reranker_id)
         expression = self._expression(metadata_filter)
 
         with self._conn.session() as client:
@@ -169,7 +189,7 @@ class GoodMemRetriever(weave.Object):
                 kwargs["space_keys"] = [
                     {"spaceId": sid, "filter": expression} for sid in targets
                 ]
-            if reranked:
+            if rerank_requested:
                 kwargs["reranker_id"] = self.reranker_id
                 kwargs["max_results"] = want
             if self.llm_id:
@@ -180,8 +200,14 @@ class GoodMemRetriever(weave.Object):
             events = list(client.memories.retrieve(**kwargs))
 
         statuses, degraded = classify(events)
+        # Decided from the whole response, not from configuration: when the
+        # reranker fails the server still returns the vector-stage hits, and
+        # a RERANKING_FAILED can follow them in the stream.
+        reranked = rerank_requested and not reranking_failed(events)
         hits = hits_from_events(events, reranked=reranked)
 
+        # A reranker threshold applies only to reranker scores. Applied to the
+        # vector fallback it would discard hits the server returned (Q4a).
         if reranked and self.min_score is not None:
             kept = [
                 h for h in hits if h["score"] is None or h["score"] >= self.min_score
