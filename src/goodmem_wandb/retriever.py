@@ -89,7 +89,11 @@ class GoodMemRetriever(weave.Object):
     )
     metadata_filter: dict[str, Any] | None = Field(
         default=None,
-        description="Field/value pairs, safely quoted and AND-ed into the filter.",
+        description=(
+            "Field/value pairs AND-ed into the filter. Each value is compared "
+            "as its own type: str as TEXT, bool as BOOLEAN, int/float as "
+            "NUMERIC; None and other types are refused."
+        ),
     )
 
     llm_id: str | None = Field(

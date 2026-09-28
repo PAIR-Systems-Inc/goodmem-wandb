@@ -47,8 +47,11 @@ if not (BASE_URL and API_KEY and EMBEDDER_ID):
 
 CANARY = "The GoodMem Weave live-test canary is FIG-88-MERIDIAN."
 FACTS = [
-    (CANARY, {"category": "canary"}),
-    ("Weave records an op call's inputs, output and latency.", {"category": "weave"}),
+    (CANARY, {"category": "canary", "flag": True, "n": 5}),
+    (
+        "Weave records an op call's inputs, output and latency.",
+        {"category": "weave", "flag": False, "n": -3},
+    ),
     ("A GoodMem vector score may be negative.", {"category": "scores"}),
 ]
 
@@ -164,6 +167,31 @@ def test_metadata_filter_scopes_the_search(retriever: GoodMemRetriever) -> None:
     out = retriever.search("anything", metadata_filter={"category": "scores"})
     assert out["hits"]
     assert all(h["metadata"].get("category") == "scores" for h in out["hits"])
+
+
+@pytest.mark.parametrize(
+    ("metadata_filter", "expected"),
+    [
+        ({"flag": True}, {"canary"}),
+        ({"flag": False}, {"weave"}),
+        ({"n": 5}, {"canary"}),
+        ({"n": 5.0}, {"canary"}),
+        ({"n": -3}, {"weave"}),
+        ({"flag": True, "category": "canary"}, {"canary"}),
+        ({"n": 1e20}, set()),
+        ({"n": 1.5e-7}, set()),
+    ],
+    ids=repr,
+)
+def test_boolean_and_numeric_filters_compare_as_their_own_type(
+    retriever: GoodMemRetriever, metadata_filter: dict[str, Any], expected: set[str]
+) -> None:
+    """0.2.1 compared every value as text: {"flag": True} was sent as
+    = 'True' and {"n": 5.0} as = '5.0'; both matched nothing, with HTTP 200.
+    The plain-decimal forms of 1e20 and 1.5e-7 must parse, too."""
+    out = retriever.search("anything", metadata_filter=metadata_filter)
+    assert {h["metadata"].get("category") for h in out["hits"]} == expected
+    assert out["partial"] is False
 
 
 def test_a_filter_matching_nothing_is_empty_not_an_error(

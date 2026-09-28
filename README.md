@@ -135,17 +135,34 @@ live server (v1.0.320) with a missing reranker: the three hits scored
 ## Filtering
 
 ```python
-retriever = GoodMemRetriever(space_name="docs", metadata_filter={"category": "billing"})
+retriever = GoodMemRetriever(
+    space_name="docs", metadata_filter={"category": "billing", "archived": False}
+)
 retriever.search("refunds", metadata_filter={"lang": "en"})   # AND-ed per call
 ```
 
-Values are quoted for the GoodMem filter grammar (backslash escaping, verified
-against a live server; control characters are refused rather than mangled).
+Each value is compared as its own type. GoodMem compares a cast of the stored
+JSON value, and the cast has to match the type:
+
+| Value | Sent as |
+| --- | --- |
+| `str` | `CAST(val('$.field') AS TEXT) = '…'`, quoted for the filter grammar (backslash escaping, verified against a live server; control characters are refused rather than mangled) |
+| `bool` | `CAST(val('$.field') AS BOOLEAN) = true` or `= false` |
+| `int`, `float` | `CAST(val('$.field') AS NUMERIC) = 2026`, finite numbers only, written as a plain decimal |
+| `None`, anything else | Refused with `ValueError` before any request is sent |
+
+A mismatched cast is not rejected by the server, it just matches nothing. On a
+live server (v1.0.320) a memory with metadata `{"flag": true, "n": 5}` is
+found by `CAST(val('$.flag') AS BOOLEAN) = true` and by
+`CAST(val('$.n') AS NUMERIC) = 5.0`, but `CAST(val('$.flag') AS TEXT) = 'True'`
+and `CAST(val('$.n') AS TEXT) = '5.0'` both return nothing with HTTP 200. A
+string stays text: `{"year": "2026"}` compares the text `'2026'`.
+
 For anything more complex, pass an expression directly:
 
 ```python
 GoodMemRetriever(space_name="docs",
-                 filter="CAST(val('$.year') AS TEXT) = '2026'")
+                 filter="CAST(val('$.year') AS NUMERIC) >= 2026")
 ```
 
 ## Attaching to a space by name

@@ -183,6 +183,9 @@ def test_every_readme_python_block_runs(readme_env: Any) -> None:
     assert len(filtered) == 1
     expression = filtered[0]["spaceKeys"][0]["filter"]
     assert "'billing'" in expression and "'en'" in expression and " AND " in expression
+    # Each value is compared as its own type, as the README's table says.
+    assert "CAST(val('$.archived') AS BOOLEAN) = false" in expression
+    assert "CAST(val('$.category') AS TEXT) = 'billing'" in expression
 
 
 def test_the_readme_evaluation_actually_runs_both_models(readme_env: Any) -> None:
