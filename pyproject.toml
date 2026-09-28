@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "goodmem-wandb"
-version = "0.2.0"
+version = "0.2.1"
 description = "GoodMem retrieval for Weights & Biases Weave — traced ops, an evaluable weave.Model, and retrieval scorers."
 readme = "README.md"
 license = { text = "MIT" }

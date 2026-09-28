@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.1
+
+Documentation only; no behaviour change in the package.
+
+### Fixed
+
+* **The README's evaluation example never evaluated anything.** weave's
+  `Evaluation.evaluate` is a coroutine, and the README, `examples/demo.py`
+  and the `GoodMemRetrievalModel` docstring called it bare: each call
+  returned an un-awaited coroutine, made no GoodMem request and logged
+  nothing to Weave. All three now use `asyncio.run(evaluation.evaluate(...))`.
+* The `search()` return table in the README now lists `query`, and the live
+  test notes say one test (not several) needs `GOODMEM_RERANKER_ID`.
+
+### Added
+
+* `tests/test_readme.py` runs the README's Python blocks as written, the
+  demo script and the docstring example against the captured fixtures, and
+  checks the documented return keys against a real `search()` result.
+  44 offline tests (was 39); the 11 live tests are unchanged.
+
 ## 0.2.0
 
 A rewrite. 0.1.0 shipped no Weave integration at all: it was a hand-rolled

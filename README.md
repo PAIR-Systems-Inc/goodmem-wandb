@@ -30,6 +30,7 @@ for hit in result["hits"]:
 
 | Key | What it is |
 | --- | --- |
+| `query` | The query as passed in |
 | `hits` | `chunk_id`, `chunk_text`, `memory_id`, `space_id`, `source`, `score`, `score_kind`, `metadata` — in the server's order |
 | `score_kind` | `"vector"` or `"reranker"`. They are different scales; see below |
 | `statuses` | Server statuses that indicate a real problem, `[]` when clean |
@@ -57,6 +58,8 @@ attribute; `tests/test_regressions.py` asserts it.
 ## Evaluate a retrieval configuration
 
 ```python
+import asyncio
+
 import weave
 from goodmem_wandb import GoodMemRetrievalModel, RecallAtK, MRR, FactRecall, RetrievalHealth
 
@@ -75,9 +78,12 @@ evaluation = weave.Evaluation(
     dataset=dataset,
     scorers=[RecallAtK(k=5), MRR(), FactRecall(), RetrievalHealth()],
 )
-evaluation.evaluate(baseline)
-evaluation.evaluate(reranked)   # compare the two in the Weave UI
+asyncio.run(evaluation.evaluate(baseline))
+asyncio.run(evaluation.evaluate(reranked))   # compare the two in the Weave UI
 ```
+
+`Evaluation.evaluate` is a coroutine: called without `asyncio.run` (or
+`await` in a notebook) it returns without running anything.
 
 Changing any field on the model versions it, so the two runs are directly
 comparable. The credentials are not fields, so they are not part of the
@@ -167,7 +173,7 @@ GOODMEM_BASE_URL=… GOODMEM_API_KEY=… GOODMEM_EMBEDDER_ID=… \
   pytest -m integration
 ```
 
-`GOODMEM_RERANKER_ID` is optional — the reranker tests skip without it.
+`GOODMEM_RERANKER_ID` is optional — the one reranker test skips without it.
 `GOODMEM_VERIFY_SSL=0` is for a local server with a self-signed certificate.
 
 There is no default credential anywhere in this repository.
