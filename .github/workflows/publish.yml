@@ -1,7 +1,9 @@
 name: Publish to PyPI
 
 # Two triggers:
-#   - Push a version tag like v0.1.0 (recommended path).
+#   - A version tag like v0.1.0. Merging a version bump creates it:
+#     release-on-merge.yml tags the merge once CI passes on main and starts
+#     this workflow on the tag. Pushing the tag by hand works too.
 #   - Manually run from the Actions tab (workflow_dispatch) for ad-hoc releases.
 #
 # Authentication uses PyPI Trusted Publishing (OIDC). Configure the trusted
