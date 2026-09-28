@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.2.2
+
+Two retrieval fixes. Both were reproduced against a live GoodMem server
+(v1.0.320) before the fix and re-measured after it.
+
+### Fixed
+
+* **A failed reranker's hits were labelled and thresholded as reranker
+  scores.** With `reranker_id` set and the reranker failing, the server still
+  returns the vector-stage hits and reports `RERANKING_FAILED` (plus
+  `NOT_FOUND` for a missing reranker). 0.2.1 labelled those hits
+  `score_kind: "reranker"` from configuration and applied `min_score` to
+  their vector scores: live, a missing reranker with `min_score=0.0` returned
+  0 of 3 hits and a warning about the reranker's scale. `score_kind` is now
+  decided from the whole response, so those hits are `"vector"`, `min_score`
+  is not applied to them, and all 3 come back with `partial: True` and both
+  statuses. A working reranker and any unrelated status are unaffected.
+* **Boolean and float `metadata_filter` values matched nothing.** Every
+  value was compared as text, so `{"flag": True}` was sent as
+  `CAST(val('$.flag') AS TEXT) = 'True'` and `{"n": 5.0}` as `= '5.0'`; the
+  server accepts both and returns 0 results. Each value is now compared as
+  its own type: `str` as `TEXT` (escaping unchanged), `bool` as `BOOLEAN`,
+  `int`/`float` as `NUMERIC` (finite, written as a plain decimal). `None` and
+  other types raise `ValueError` before any request instead of being sent as
+  the text `'None'`.
+
+### Behaviour change
+
+* A Python number or boolean in `metadata_filter` is now compared as a number
+  or a boolean. To compare text, pass a string: `{"year": "2026"}`. Measured
+  live, the typed casts also accept string-stored values the server can
+  convert (a stored `"5"` matches `{"n": 5}`; a stored `"true"` matches
+  `{"flag": True}`), and a value it cannot convert simply does not match.
+
+### Tests
+
+* 86 offline tests (was 44): `tests/test_reranker_fallback.py` (16) replays
+  the live-captured degraded streams, `tests/test_typed_filters.py` (26)
+  checks the filter each value sends through the real SDK. 31 of the 42 fail
+  on 0.2.1; the rest are controls.
+* 20 live tests (was 11): the failed-reranker fallback and 8 typed-filter
+  cases.
+
 ## 0.2.1
 
 Documentation only; no behaviour change in the package.
