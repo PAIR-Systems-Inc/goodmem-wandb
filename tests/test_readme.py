@@ -25,7 +25,15 @@ from goodmem import Goodmem
 import httpx
 import pytest
 
-from tests.conftest import InMemoryTraceServer, load_bytes, load_json
+from tests.conftest import (
+    _SDK_TYPES,
+    _TSI,
+    InMemoryTraceServer,
+    load_bytes,
+    load_json,
+    req_field,
+    weave_type,
+)
 
 README = Path(__file__).resolve().parent.parent / "README.md"
 BASE_URL = "https://goodmem.readme.test"
@@ -58,18 +66,20 @@ class TracingServer(InMemoryTraceServer):
     remote_request_bytes_limit = 32 * 1024 * 1024
 
     def call_start(self, req: Any) -> Any:
-        from weave.trace_server import trace_server_interface as tsi
-
         self.calls.append(("call_start", (req,)))
-        return tsi.CallStartRes(id=req.start.id, trace_id=req.start.trace_id)
+        CallStartRes = weave_type(_TSI, "CallStartRes", _SDK_TYPES, "CallStartResponse")
+        return CallStartRes(
+            id=req_field(req, "start", "id"), trace_id=req_field(req, "start", "trace_id")
+        )
 
     def feedback_create(self, req: Any) -> Any:
         import datetime
 
-        from weave.trace_server import trace_server_interface as tsi
-
         self.calls.append(("feedback_create", (req,)))
-        return tsi.FeedbackCreateRes(
+        FeedbackCreateRes = weave_type(
+            _TSI, "FeedbackCreateRes", _SDK_TYPES, "FeedbackCreateResponse"
+        )
+        return FeedbackCreateRes(
             id=f"f{len(self.calls)}",
             created_at=datetime.datetime.now(datetime.timezone.utc),
             wb_user_id="readme",
@@ -77,15 +87,21 @@ class TracingServer(InMemoryTraceServer):
         )
 
     def table_create(self, req: Any) -> Any:
-        from weave.trace_server import trace_server_interface as tsi
-
-        rows = req.table.rows
-        return tsi.TableCreateRes(
+        rows = list(req_field(req, "table", "rows"))
+        TableCreateRes = weave_type(_TSI, "TableCreateRes", _SDK_TYPES, "TableCreateResponse")
+        return TableCreateRes(
             digest=f"t{len(self.calls)}",
             row_digests=[f"r{i}" for i in range(len(rows))],
         )
 
     def started(self, op_fragment: str) -> int:
+        # Count what the client has sent, not what it still holds: weave
+        # 0.53.13 queues every call_start until the client is flushed.
+        from weave.trace.context import weave_client_context
+
+        client = weave_client_context.get_weave_client()
+        if client is not None:
+            client.flush()
         return sum(
             1
             for name, args in self.calls

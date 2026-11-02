@@ -104,6 +104,34 @@ def client(recorder: Recorder) -> Goodmem:
 
 
 # ------------------------------------------------------------------- weave
+# Weave changed its trace-server interface twice in a week, and both changes
+# broke this recorder without touching goodmem-wandb: 0.53.13 sends requests as
+# plain dicts instead of pydantic models, and 0.54.0 removed the
+# ``weave.trace_server`` module that held the response classes. These two
+# helpers read and answer either form, so the suite runs on every weave the
+# package allows.
+def req_field(req: Any, *path: str) -> Any:
+    """Read ``req.<path>`` from a dict request (weave >= 0.53.13) or a model."""
+    for name in path:
+        req = req[name] if isinstance(req, dict) else getattr(req, name)
+    return req
+
+
+def weave_type(old_module: str, old_name: str, new_module: str, new_name: str) -> Any:
+    """A trace-server type from ``weave.trace_server`` or, from 0.54, its new home."""
+    import importlib
+
+    try:
+        return getattr(importlib.import_module(old_module), old_name)
+    except ImportError:
+        return getattr(importlib.import_module(new_module), new_name)
+
+
+_TSI = "weave.trace_server.trace_server_interface"
+_SERVICE = "weave.trace_server.service_interface"
+_SDK_TYPES = "weave.vendor.weave_server_sdk.types"
+
+
 class InMemoryTraceServer:
     """Enough of the Weave trace server to see what a publish would upload."""
 
@@ -112,22 +140,24 @@ class InMemoryTraceServer:
         self.calls: list[tuple[str, Any]] = []
 
     def server_info(self) -> Any:
-        from weave.trace_server.service_interface import ServerInfoRes
-
+        ServerInfoRes = weave_type(_SERVICE, "ServerInfoRes", _SDK_TYPES, "ServerInfoRes")
         return ServerInfoRes(
             min_required_weave_python_version="0.0.0", trace_server_version="test"
         )
 
     def ensure_project_exists(self, entity: str, project: str) -> Any:
-        from weave.trace_server.service_interface import EnsureProjectExistsRes
-
+        EnsureProjectExistsRes = weave_type(
+            _SERVICE,
+            "EnsureProjectExistsRes",
+            "weave.trace_server_bindings.models",
+            "EnsureProjectExistsRes",
+        )
         return EnsureProjectExistsRes(project_name=project)
 
     def obj_create(self, req: Any) -> Any:
-        from weave.trace_server import trace_server_interface as tsi
-
-        self.objs.append(dict(req.obj.val))
-        return tsi.ObjCreateRes(digest=f"d{len(self.objs)}")
+        self.objs.append(dict(req_field(req, "obj", "val")))
+        ObjCreateRes = weave_type(_TSI, "ObjCreateRes", _SDK_TYPES, "ObjectCreateResponse")
+        return ObjCreateRes(digest=f"d{len(self.objs)}")
 
     def __getattr__(self, name: str) -> Any:
         def stub(*args: Any, **kwargs: Any) -> None:
